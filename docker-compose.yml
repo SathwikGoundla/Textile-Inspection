@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: textile_inspection_api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///./textile_inspection.db
+      # - DATABASE_URL=postgresql://user:password@db:5432/textile_db
+      # - CAMERA_RTSP_URL=rtsp://camera-ip:554/stream
+    volumes:
+      - ./backend:/app
+      - ./frontend:/app/../frontend
+      - ./logs:/app/logs
+    devices:
+      - "/dev/video0:/dev/video0"  # Pass through webcam (Linux)
+    restart: unless-stopped
+
+  # Uncomment for PostgreSQL support:
+  # db:
+  #   image: postgres:15
+  #   environment:
+  #     POSTGRES_USER: user
+  #     POSTGRES_PASSWORD: password
+  #     POSTGRES_DB: textile_db
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+
+# volumes:
+#   postgres_data:
