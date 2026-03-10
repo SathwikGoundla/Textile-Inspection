@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <title>TextileVision AI</title>
+<!-- TensorFlow.js + MobileNet — runs 100% in browser, no API -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#050e1a;color:#d0eeff;font-family:'Courier New',monospace;height:100vh;display:flex;flex-direction:column;overflow:hidden}
@@ -17,7 +20,6 @@ header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;ba
 .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;border:1px solid #00ff88;color:#00ff88;font-size:10px;letter-spacing:1px}
 .pill::before{content:'';width:6px;height:6px;border-radius:50%;background:#00ff88;animation:bl 1.2s infinite}
 @keyframes bl{0%,100%{opacity:1}50%{opacity:0.2}}
-
 .main{flex:1;display:grid;grid-template-columns:1fr 340px;overflow:hidden;position:relative;z-index:1}
 
 /* CAMERA */
@@ -32,45 +34,39 @@ header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;ba
 .scanline{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#00ff88,transparent);animation:sd 2.5s linear infinite;pointer-events:none;z-index:4}
 @keyframes sd{from{top:-2px}to{top:100%}}
 
-/* Analyzing flash overlay */
-#analyzing{position:absolute;inset:0;background:rgba(0,212,255,0.08);display:none;align-items:center;justify-content:center;z-index:20;flex-direction:column;gap:14px}
-#analyzing.show{display:flex}
-.spin{width:44px;height:44px;border:3px solid rgba(0,212,255,0.2);border-top-color:#00d4ff;border-radius:50%;animation:sp 0.7s linear infinite}
-@keyframes sp{to{transform:rotate(360deg)}}
-#analyzing p{font-size:13px;color:#00d4ff;letter-spacing:3px}
-
-/* Result overlay on camera — big status */
-#cam-status{
-  position:absolute;bottom:22px;left:50%;transform:translateX(-50%);
-  padding:12px 40px;font-size:24px;font-weight:bold;letter-spacing:5px;
-  border:2.5px solid;border-radius:4px;z-index:10;white-space:nowrap;
-  transition:all 0.3s;display:none;
-}
+#cam-status{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);padding:12px 40px;font-size:24px;font-weight:bold;letter-spacing:5px;border:2.5px solid;border-radius:4px;z-index:10;white-space:nowrap;transition:all 0.3s;display:none}
 #cam-status.PASS{color:#00ff88;border-color:#00ff88;background:rgba(0,255,136,0.1);box-shadow:0 0 28px rgba(0,255,136,0.3)}
 #cam-status.FAIL{color:#ff2d55;border-color:#ff2d55;background:rgba(255,45,85,0.1);box-shadow:0 0 28px rgba(255,45,85,0.3);animation:fp 0.9s ease-in-out infinite}
 #cam-status.REJECTED{color:#ff8c00;border-color:#ff8c00;background:rgba(255,140,0,0.08)}
 @keyframes fp{0%,100%{opacity:1}50%{opacity:0.5}}
 
-/* permission overlay */
-#cam-off{position:absolute;inset:0;background:#050e1a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:30}
+#analyzing{position:absolute;inset:0;background:rgba(5,14,26,0.82);display:none;align-items:center;justify-content:center;z-index:20;flex-direction:column;gap:14px}
+#analyzing.show{display:flex}
+.spin{width:44px;height:44px;border:3px solid rgba(0,212,255,0.2);border-top-color:#00d4ff;border-radius:50%;animation:sp 0.7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+#analyzing p{font-size:13px;color:#00d4ff;letter-spacing:3px}
+
+#loading-overlay{position:absolute;inset:0;background:#050e1a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:40}
+#loading-overlay h3{color:#00d4ff;letter-spacing:2px;font-size:16px}
+#load-progress{width:260px;height:4px;background:#0a2a4a;border-radius:2px;overflow:hidden}
+#load-bar{height:100%;background:linear-gradient(90deg,#00d4ff,#00ff88);width:0%;transition:width 0.3s}
+#load-msg{font-size:11px;color:#3a6080;letter-spacing:1px}
+
+#cam-off{position:absolute;inset:0;background:#050e1a;display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:30}
 #cam-off h3{color:#00d4ff;letter-spacing:2px}
-#cam-off p{font-size:11px;color:#3a6080;text-align:center;max-width:300px;line-height:1.7}
-.start-btn{background:#00d4ff;color:#050e1a;border:none;padding:13px 34px;font-family:monospace;font-size:14px;font-weight:bold;letter-spacing:2px;border-radius:4px;cursor:pointer}
-.start-btn:hover{background:#00ff88}
-#cam-err{color:#ff2d55;font-size:11px;text-align:center;max-width:320px;line-height:1.7;display:none}
+#cam-err{color:#ff2d55;font-size:11px;text-align:center;max-width:320px;line-height:1.7}
+.sbtn{background:#00d4ff;color:#050e1a;border:none;padding:13px 34px;font-family:monospace;font-size:14px;font-weight:bold;letter-spacing:2px;border-radius:4px;cursor:pointer}
+.sbtn:hover{background:#00ff88}
 
 /* PANEL */
 .panel{background:#07111e;display:flex;flex-direction:column;overflow:hidden}
 .ps{padding:13px 16px;border-bottom:1px solid #0a2a4a}
 .pl{font-size:9px;letter-spacing:3px;color:#2a5070;text-transform:uppercase;margin-bottom:9px}
-
-/* Color swatch */
 .color-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-#color-swatch{width:28px;height:28px;border-radius:4px;border:1px solid #1a3050;flex-shrink:0;transition:background 0.4s}
-#obj-name{font-size:18px;font-weight:bold;color:#2a5070;transition:color 0.3s;line-height:1.2}
+#color-swatch{width:32px;height:32px;border-radius:5px;border:2px solid #1a3050;flex-shrink:0;transition:background 0.4s}
+#obj-name{font-size:18px;font-weight:bold;color:#2a5070;transition:color 0.3s;line-height:1.3}
 #obj-name.tex{color:#00ff88}
 #obj-name.obj{color:#ff8c00}
-
 .conf-row{display:flex;align-items:center;gap:10px}
 .cl{font-size:10px;color:#2a5070;width:36px}
 .ct{flex:1;height:5px;background:#0a2a4a;border-radius:3px;overflow:hidden}
@@ -87,7 +83,6 @@ header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;ba
 .lf.rej{background:linear-gradient(90deg,#ff8c00,#ffd60a)}
 #lock-txt{font-size:11px;color:#2a5070;letter-spacing:1px;text-align:center}
 
-/* Defects */
 .da{flex:1;overflow-y:auto;padding:13px 16px}
 .da::-webkit-scrollbar{width:3px}
 .da::-webkit-scrollbar-thumb{background:#0a2a4a}
@@ -108,17 +103,10 @@ header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;ba
 /* BOTTOM */
 .bot{display:flex;flex-direction:column}
 .ctrl{display:flex;align-items:center;gap:12px;padding:10px 18px;background:#050e1a;border-top:1px solid #0a2a4a}
-#scan-btn{
-  background:#00d4ff;color:#050e1a;border:none;
-  padding:12px 38px;font-family:monospace;font-size:15px;
-  font-weight:bold;letter-spacing:3px;border-radius:4px;
-  cursor:pointer;text-transform:uppercase;transition:all 0.2s;
-  box-shadow:0 0 20px rgba(0,212,255,0.35);
-}
+#scan-btn{background:#00d4ff;color:#050e1a;border:none;padding:12px 38px;font-family:monospace;font-size:15px;font-weight:bold;letter-spacing:3px;border-radius:4px;cursor:pointer;text-transform:uppercase;transition:all 0.2s;box-shadow:0 0 20px rgba(0,212,255,0.35)}
 #scan-btn:hover:not(:disabled){background:#00ff88;transform:scale(1.04);box-shadow:0 0 28px rgba(0,255,136,0.4)}
 #scan-btn:disabled{background:#0c1a2e;color:#2a5070;cursor:not-allowed;box-shadow:none;transform:none;border:1px solid #1a3050}
 #smsg{font-size:11px;color:#2a5070;margin-left:4px;flex:1}
-
 .stats{display:grid;grid-template-columns:repeat(5,1fr);background:#07111e;border-top:1px solid #0a2a4a}
 .st{padding:9px 12px;border-right:1px solid #0a2a4a}
 .st:last-child{border-right:none}
@@ -131,44 +119,44 @@ header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;ba
 <body>
 
 <header>
-  <div class="logo">TEXTILEVISION AI<span>GEMINI AI · ACCURATE DETECTION · SCAN ON DEMAND</span></div>
+  <div class="logo">TEXTILEVISION AI<span>TENSORFLOW.JS · ON-DEVICE AI · NO API · NO QUOTA</span></div>
   <div class="hdr-r">
     <div id="clock">00:00:00</div>
-    <div class="pill" id="live-pill">STARTING...</div>
+    <div class="pill" id="live-pill">LOADING MODEL...</div>
   </div>
 </header>
 
 <div class="main">
-
-  <!-- CAMERA -->
   <div class="cam">
     <div class="cr tl"></div><div class="cr tr"></div>
     <div class="cr bl"></div><div class="cr br"></div>
     <div class="scanline"></div>
 
+    <!-- Model loading overlay -->
+    <div id="loading-overlay">
+      <div class="spin"></div>
+      <h3>LOADING AI MODEL</h3>
+      <div id="load-progress"><div id="load-bar"></div></div>
+      <div id="load-msg">Downloading MobileNet (~15MB)...</div>
+    </div>
+
+    <!-- Camera permission overlay -->
     <div id="cam-off">
       <h3>📷 CAMERA ACCESS</h3>
-      <p>Click below then allow camera access</p>
-      <button class="start-btn" onclick="startCam()">🎥 START CAMERA</button>
+      <p style="font-size:11px;color:#3a6080;text-align:center;max-width:300px;line-height:1.7">Click below then click Allow</p>
+      <button class="sbtn" onclick="startCam()">🎥 START CAMERA</button>
       <div id="cam-err"></div>
-      <p style="font-size:10px;color:#1a3050">Camera busy? Close Teams/Zoom first</p>
+      <p style="font-size:10px;color:#1a3050;text-align:center">Camera busy? Close Teams/Zoom first</p>
     </div>
 
     <video id="video" autoplay playsinline muted></video>
     <canvas id="canvas"></canvas>
 
-    <div id="analyzing">
-      <div class="spin"></div>
-      <p>GEMINI ANALYZING...</p>
-    </div>
-
+    <div id="analyzing"><div class="spin"></div><p>ANALYZING ON-DEVICE...</p></div>
     <div id="cam-status"></div>
   </div>
 
-  <!-- PANEL -->
   <div class="panel">
-
-    <!-- Lock countdown -->
     <div class="lock-wrap" id="lock-wrap">
       <div class="lt"><div class="lf" id="lf" style="width:100%"></div></div>
       <div id="lock-txt">Result locked — 10.0s</div>
@@ -178,7 +166,7 @@ header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;ba
       <div class="pl">Detected Object</div>
       <div class="color-row">
         <div id="color-swatch" style="background:#1a3050"></div>
-        <div id="obj-name">PRESS SCAN TO ANALYZE</div>
+        <div id="obj-name">LOADING AI MODEL...</div>
       </div>
       <div class="conf-row">
         <span class="cl">CONF</span>
@@ -191,52 +179,106 @@ header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;ba
       <div class="pl">Defect Report</div>
       <div class="stag NONE" id="stag">● AWAITING SCAN</div>
       <div id="dlist">
-        <div class="nd">
-          <span class="ic" style="color:#00d4ff">◎</span>
-          POINT CAMERA AT OBJECT<br>PRESS SCAN TO ANALYZE
-        </div>
+        <div class="nd"><span class="ic" style="color:#00d4ff">◎</span>MODEL LOADING...<br>PLEASE WAIT</div>
       </div>
     </div>
-
   </div>
 </div>
 
 <div class="bot">
   <div class="ctrl">
     <button id="scan-btn" onclick="doScan()" disabled>⬡ SCAN NOW</button>
-    <span id="smsg">Start camera to begin</span>
+    <span id="smsg">Loading AI model — please wait...</span>
   </div>
   <div class="stats">
     <div class="st"><div class="sl">TOTAL</div><div class="sv" id="ss-t">0</div><div class="ss">scans</div></div>
     <div class="st"><div class="sl">PASS</div><div class="sv g" id="ss-p">0</div><div class="ss">clean fabric</div></div>
-    <div class="st"><div class="sl">FAIL</div><div class="sv r" id="ss-f">0</div><div class="ss">defects found</div></div>
+    <div class="st"><div class="sl">FAIL</div><div class="sv r" id="ss-f">0</div><div class="ss">defects</div></div>
     <div class="st"><div class="sl">REJECTED</div><div class="sv o" id="ss-r">0</div><div class="ss">non-textile</div></div>
     <div class="st"><div class="sl">PASS RATE</div><div class="sv" id="ss-pr">—</div><div class="ss">quality</div></div>
   </div>
 </div>
 
 <script>
-// ── Gemini API — correct model ────────────────────────────
-const GEMINI_KEY = 'AIzaSyBKBsR7qZEvwBw8l92j6QULIG61i2jpKy0';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
+// ═══════════════════════════════════════════════════════════
+//  TextileVision AI — TensorFlow.js MobileNet
+//  100% on-device, zero API calls, zero quota
+// ═══════════════════════════════════════════════════════════
 
-let stream = null;
-let locked = false;
-let lockTimer = null;
+let model   = null;
+let stream  = null;
+let locked  = false;
 let lockInterval = null;
-let lockEnd = 0;
-let stats = {t:0,p:0,f:0,r:0};
+let stats   = {t:0,p:0,f:0,r:0};
 
 const video  = document.getElementById('video');
 const canvas = document.getElementById('canvas');
 const ctx    = canvas.getContext('2d');
 
-setInterval(()=>{ document.getElementById('clock').textContent = new Date().toTimeString().slice(0,8); }, 1000);
+// ── Textile-related ImageNet classes ─────────────────────
+// MobileNet is trained on ImageNet — these are fabric/garment classes
+const TEXTILE_CLASSES = new Set([
+  'abaya','academic gown','apron','brassiere','bulletproof vest',
+  'burrito','cardigan','cloak','fur coat','gown','jean','jersey',
+  'kimono','lab coat','maillot','military uniform','miniskirt',
+  'mitten','neck brace','overskirt','pajama','poncho',
+  'sarong','scarf','shower cap','ski mask','sleeping bag',
+  'sock','stole','suit','sweatshirt','swimming trunks',
+  'trench coat','vestment','wedding dress','wool',
+  // partial matches handled separately
+]);
 
-// ── CAMERA ───────────────────────────────────────────────
+// Words that indicate textile even if not exact match
+const TEXTILE_KEYWORDS = [
+  'shirt','cloth','fabric','textile','garment','dress','jeans',
+  'cotton','linen','silk','wool','polyester','denim','knit',
+  'woven','fleece','curtain','towel','sheet','blanket','pillow',
+  'jacket','coat','pants','skirt','blouse','sweater','hoodie',
+  'uniform','apron','scarf','hat','cap','glove','sock','shoe',
+  'jersey','vest','suit','gown','robe','sari','saree','dupatta',
+  'handkerchief','napkin','rug','carpet','mat'
+];
+
+// Non-textile objects
+const REJECTED_KEYWORDS = [
+  'bottle','phone','mobile','laptop','computer','keyboard','mouse',
+  'book','pen','pencil','cup','mug','glass','plate','bowl','spoon',
+  'fork','knife','food','fruit','vegetable','flower','plant',
+  'face','person','hand','finger','skin','nail','hair',
+  'wall','floor','ceiling','table','chair','desk','door','window',
+  'car','vehicle','bag','purse','wallet','coin','money','key',
+  'watch','glasses','spectacles','remote','cable','wire'
+];
+
+// ── Clock ─────────────────────────────────────────────────
+setInterval(()=>{ document.getElementById('clock').textContent = new Date().toTimeString().slice(0,8); },1000);
+
+// ── LOAD MODEL ───────────────────────────────────────────
+async function loadModel() {
+  try {
+    setLoadMsg('Downloading MobileNet AI model (~15MB)...', 20);
+    model = await mobilenet.load({version:2, alpha:1.0});
+    setLoadMsg('Model ready!', 100);
+    await new Promise(r=>setTimeout(r,400));
+    document.getElementById('loading-overlay').style.display='none';
+    document.getElementById('cam-off').style.display='flex';
+    document.getElementById('live-pill').textContent='MODEL READY';
+    msg('AI model loaded — start camera to begin');
+  } catch(e) {
+    setLoadMsg('Load failed: '+e.message, 0);
+    console.error('Model load error:', e);
+  }
+}
+
+function setLoadMsg(m, pct) {
+  document.getElementById('load-msg').textContent = m;
+  document.getElementById('load-bar').style.width  = pct+'%';
+}
+
+// ── START CAMERA ─────────────────────────────────────────
 async function startCam() {
   const errEl = document.getElementById('cam-err');
-  errEl.style.display = 'none';
+  errEl.style.display='none'; errEl.textContent='';
   try {
     let s;
     try { s = await navigator.mediaDevices.getUserMedia({video:{width:640,height:480}}); }
@@ -246,165 +288,331 @@ async function startCam() {
     document.getElementById('cam-off').style.display = 'none';
     document.getElementById('scan-btn').disabled = false;
     document.getElementById('live-pill').textContent = 'CAM LIVE';
+    document.getElementById('obj-name').textContent  = 'PRESS SCAN TO ANALYZE';
+    document.getElementById('dlist').innerHTML =
+      '<div class="nd"><span class="ic" style="color:#00d4ff">◎</span>POINT CAMERA AT OBJECT<br>PRESS SCAN TO ANALYZE</div>';
     msg('Camera ready — point at object and press SCAN');
   } catch(e) {
-    errEl.style.display = 'block';
-    if(e.name==='NotAllowedError')     errEl.textContent='❌ Denied — click 🔒 in address bar → Camera → Allow → Refresh';
+    errEl.style.display='block';
+    if(e.name==='NotAllowedError')       errEl.textContent='❌ Denied — click 🔒 in address bar → Camera → Allow → Refresh';
     else if(e.name==='NotReadableError') errEl.textContent='❌ Camera busy — close Teams/Zoom/Discord first';
-    else errEl.textContent='❌ '+e.message;
+    else                                 errEl.textContent='❌ '+e.message;
   }
 }
 
 // ── SCAN ─────────────────────────────────────────────────
 async function doScan() {
-  if(locked || !stream) return;
+  if(locked || !model || !stream) return;
 
-  // Capture frame
-  const vw = video.videoWidth||640, vh = video.videoHeight||480;
-  canvas.width = vw; canvas.height = vh;
-  ctx.drawImage(video, 0, 0, vw, vh);
-  const b64 = canvas.toDataURL('image/jpeg', 0.88).split(',')[1];
-
-  // Sample actual colors from canvas for display swatch
-  const centerColor = sampleColor(canvas, vw, vh);
-
-  // Show analyzing
   document.getElementById('analyzing').classList.add('show');
   document.getElementById('scan-btn').disabled = true;
   document.getElementById('scan-btn').textContent = '⬡ ANALYZING...';
-  msg('Gemini AI analyzing image...');
+  msg('Running on-device AI...');
 
   try {
-    const prompt = `You are a textile quality control expert. Analyze this image carefully.
+    // Capture frame
+    const vw = video.videoWidth||640, vh = video.videoHeight||480;
+    canvas.width = vw; canvas.height = vh;
+    ctx.drawImage(video, 0, 0, vw, vh);
 
-Respond ONLY with valid JSON — no markdown, no extra text:
-{
-  "object_name": "exact name of what you see",
-  "is_textile": true or false,
-  "fabric_type": "Cotton/Denim/Silk/Polyester/Wool/Linen/Nylon/Velvet/Satin etc — null if not textile",
-  "color": "exact color name (Red/Blue/Green/Yellow/Black/White/Grey/Orange/Purple/Pink/Maroon/Navy/Cream/Beige/Brown/Teal/Cyan/Magenta etc)",
-  "confidence": 0.85,
-  "status": "PASS or FAIL or REJECTED",
-  "defects": [
-    {"name": "defect name", "description": "what you see", "confidence": 0.9}
-  ],
-  "severity": "NONE or LOW or MEDIUM or HIGH",
-  "analysis": "one sentence summary"
-}
+    // 1. MobileNet classification
+    const predictions = await model.classify(canvas, 5);
+    console.log('MobileNet predictions:', predictions);
 
-STRICT RULES:
-- is_textile = true for ANY fabric/cloth/garment/textile material (shirt, jeans, saree, dupatta, bedsheet, towel, curtain, etc.)
-- is_textile = false ONLY for clearly non-textile items (bottle, phone, food, furniture, hand alone, etc.)
-- status = PASS if clean textile with no damage
-- status = FAIL if textile has holes / stains / tears / defects
-- status = REJECTED if NOT a textile
-- defects = [] if fabric looks undamaged
-- color must be a real specific color (not "unknown" or "mixed")
-- confidence must be between 0.72 and 0.98`;
+    // 2. Actual pixel color sampling
+    const colorInfo = sampleColor(vw, vh);
 
-    const res = await fetch(GEMINI_URL, {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        contents: [{parts:[
-          {inline_data:{mime_type:'image/jpeg',data:b64}},
-          {text: prompt}
-        ]}],
-        generationConfig: {temperature:0.1, maxOutputTokens:600}
-      })
-    });
-
-    const data = await res.json();
-    console.log('Gemini:', data);
-
-    if(data.error) throw new Error(data.error.message);
-
-    const raw   = data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-    const clean = raw.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
-    const result = JSON.parse(clean);
-
-    // Add sampled color swatch
-    result._swatch = centerColor;
+    // 3. Determine textile vs non-textile
+    const result = classifyResult(predictions, colorInfo);
     showResult(result);
 
   } catch(e) {
-    console.error(e);
+    console.error('Scan error:', e);
     msg('❌ Error: '+e.message);
-    resetScanBtn();
+    resetBtn();
   } finally {
     document.getElementById('analyzing').classList.remove('show');
   }
 }
 
-// ── SAMPLE COLOR FROM CANVAS CENTER ──────────────────────
-function sampleColor(canvas, w, h) {
-  // Sample 20x20 pixels from center
-  const imgData = ctx.getImageData(w/2-10, h/2-10, 20, 20).data;
-  let r=0,g=0,b=0,n=0;
-  for(let i=0;i<imgData.length;i+=4){r+=imgData[i];g+=imgData[i+1];b+=imgData[i+2];n++;}
-  return `rgb(${Math.round(r/n)},${Math.round(g/n)},${Math.round(b/n)})`;
+// ── CLASSIFY RESULT from MobileNet predictions ────────────
+function classifyResult(predictions, colorInfo) {
+  let isTextile   = false;
+  let topClass    = predictions[0]?.className?.toLowerCase() || '';
+  let topConf     = predictions[0]?.probability || 0;
+  let matchedName = topClass;
+
+  // Score textile evidence across all predictions
+  let textileScore = 0;
+  let rejectedScore = 0;
+
+  for(const pred of predictions) {
+    const cls   = pred.className.toLowerCase();
+    const prob  = pred.probability;
+
+    // Check textile keywords
+    for(const kw of TEXTILE_KEYWORDS) {
+      if(cls.includes(kw)) {
+        textileScore += prob * 2;
+        matchedName   = pred.className;
+        break;
+      }
+    }
+    // Check exact textile classes
+    for(const tc of TEXTILE_CLASSES) {
+      if(cls.includes(tc.toLowerCase())) {
+        textileScore += prob * 2.5;
+        matchedName   = pred.className;
+        break;
+      }
+    }
+    // Check rejected keywords
+    for(const kw of REJECTED_KEYWORDS) {
+      if(cls.includes(kw)) {
+        rejectedScore += prob * 2;
+        break;
+      }
+    }
+  }
+
+  // Also: if confidence very low for all classes, likely textile (fabric doesn't
+  // look like any specific ImageNet object)
+  const maxConf = predictions[0]?.probability || 0;
+  if(maxConf < 0.15 && textileScore < 0.1 && rejectedScore < 0.1) {
+    // Low confidence = likely plain fabric
+    textileScore += 0.4;
+  }
+
+  isTextile = textileScore > rejectedScore && textileScore > 0.12;
+
+  if(isTextile) {
+    // Detect defects via pixel analysis
+    const defects = detectDefects();
+    const hasDef  = defects.length > 0;
+    const sev     = hasDef ? (defects.length>1?'HIGH':'MEDIUM') : 'NONE';
+
+    // Build fabric name from color
+    const fabricName = `${colorInfo.name} Fabric`;
+
+    return {
+      status:      hasDef ? 'FAIL' : 'PASS',
+      is_textile:  true,
+      object_name: fabricName,
+      color_name:  colorInfo.name,
+      swatch:      colorInfo.swatch,
+      confidence:  Math.min(0.95, 0.65 + textileScore * 0.3),
+      defects,
+      severity:    sev
+    };
+  } else {
+    // Non-textile
+    const objName = cleanClassName(predictions[0]?.className || 'Object');
+    return {
+      status:      'REJECTED',
+      is_textile:  false,
+      object_name: objName,
+      color_name:  colorInfo.name,
+      swatch:      colorInfo.swatch,
+      confidence:  Math.min(0.95, maxConf + 0.15),
+      defects:     [],
+      severity:    'NONE'
+    };
+  }
+}
+
+function cleanClassName(name) {
+  // MobileNet class names often have commas — take first part
+  return name.split(',')[0].trim()
+    .split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
+}
+
+// ── SAMPLE ACTUAL COLOR FROM CANVAS ──────────────────────
+function sampleColor(vw, vh) {
+  // Sample 40x40 block from center of frame
+  const cx = Math.floor(vw/2), cy = Math.floor(vh/2);
+  const size = 30;
+  const imgData = ctx.getImageData(cx-size, cy-size, size*2, size*2).data;
+
+  let r=0, g=0, b=0, n=0;
+  // Sample every 4th pixel for speed
+  for(let i=0; i<imgData.length; i+=16) {
+    r += imgData[i]; g += imgData[i+1]; b += imgData[i+2]; n++;
+  }
+  r=Math.round(r/n); g=Math.round(g/n); b=Math.round(b/n);
+
+  return {
+    swatch: `rgb(${r},${g},${b})`,
+    name:   rgbToColorName(r, g, b)
+  };
+}
+
+// ── ACCURATE COLOR NAME from RGB ──────────────────────────
+function rgbToColorName(r, g, b) {
+  // Convert to HSL for better color naming
+  const rn=r/255, gn=g/255, bn=b/255;
+  const max=Math.max(rn,gn,bn), min=Math.min(rn,gn,bn);
+  const l=(max+min)/2;
+  let h=0, s=0;
+
+  if(max!==min){
+    const d=max-min;
+    s=l>0.5?d/(2-max-min):d/(max+min);
+    switch(max){
+      case rn: h=(gn-bn)/d+(gn<bn?6:0); break;
+      case gn: h=(bn-rn)/d+2; break;
+      case bn: h=(rn-gn)/d+4; break;
+    }
+    h/=6;
+  }
+  const H=Math.round(h*360), S=Math.round(s*100), L=Math.round(l*100);
+
+  // Achromatic
+  if(S < 15) {
+    if(L > 85) return 'White';
+    if(L > 65) return 'Light Grey';
+    if(L > 40) return 'Grey';
+    if(L > 20) return 'Dark Grey';
+    return 'Black';
+  }
+
+  // Chromatic — use Hue
+  if(L > 75) {
+    if(H<30||H>330) return 'Light Pink';
+    if(H<75) return 'Light Yellow';
+    if(H<165) return 'Light Green';
+    if(H<255) return 'Light Blue';
+    return 'Lavender';
+  }
+
+  if(H>=0   && H<15)  return L<35 ? 'Maroon' : 'Red';
+  if(H>=15  && H<35)  return 'Orange';
+  if(H>=35  && H<65)  return L<50 ? 'Olive' : 'Yellow';
+  if(H>=65  && H<150) return L<35 ? 'Dark Green' : 'Green';
+  if(H>=150 && H<195) return 'Teal';
+  if(H>=195 && H<240) return L<35 ? 'Navy' : 'Blue';
+  if(H>=240 && H<270) return 'Indigo';
+  if(H>=270 && H<300) return L<35 ? 'Dark Purple' : 'Purple';
+  if(H>=300 && H<330) return S>60 ? 'Magenta' : 'Pink';
+  if(H>=330)          return L<40 ? 'Dark Red' : 'Red';
+  return 'Multicolor';
+}
+
+// ── DEFECT DETECTION via Canvas pixel analysis ────────────
+function detectDefects() {
+  const defects = [];
+  const w = canvas.width, h = canvas.height;
+
+  // Sample a grid of pixels and look for anomalies
+  const data = ctx.getImageData(
+    Math.floor(w*0.1), Math.floor(h*0.1),
+    Math.floor(w*0.8), Math.floor(h*0.8)
+  ).data;
+
+  const gw = Math.floor(w*0.8), gh = Math.floor(h*0.8);
+
+  // Calculate mean brightness and per-channel means
+  let sumR=0,sumG=0,sumB=0,n=0;
+  for(let i=0;i<data.length;i+=4){sumR+=data[i];sumG+=data[i+1];sumB+=data[i+2];n++;}
+  const mR=sumR/n, mG=sumG/n, mB=sumB/n;
+  const meanBrightness = (mR+mG+mB)/3;
+
+  // Variance
+  let varSum=0;
+  for(let i=0;i<data.length;i+=4){
+    const bright=(data[i]+data[i+1]+data[i+2])/3;
+    varSum+=(bright-meanBrightness)**2;
+  }
+  const stdDev=Math.sqrt(varSum/n);
+
+  // HOLE detection: very dark regions (> 3 std deviations below mean)
+  const holeThreshold = meanBrightness - 3.0*stdDev;
+  if(holeThreshold > 8 && holeThreshold < meanBrightness*0.55) {
+    let darkPixels=0;
+    for(let i=0;i<data.length;i+=4){
+      const bright=(data[i]+data[i+1]+data[i+2])/3;
+      if(bright < holeThreshold) darkPixels++;
+    }
+    const darkRatio = darkPixels/n;
+    if(darkRatio > 0.008 && darkRatio < 0.12) {
+      defects.push({
+        name:'Hole / Tear',
+        description:`Dark region detected — possible physical damage (${(darkRatio*100).toFixed(1)}% area)`,
+        confidence: Math.min(0.93, 0.70+darkRatio*3)
+      });
+    }
+  }
+
+  // STAIN detection: color anomalies on otherwise uniform fabric
+  // Check color variance in hue-like space
+  let hueVarSum=0;
+  const hueMean = Math.atan2(mG-mB, mR-mG); // rough hue proxy
+  let stainCount=0;
+  for(let i=0;i<data.length;i+=4){
+    const rn=data[i],gn=data[i+1],bn=data[i+2];
+    // Saturation proxy
+    const maxC=Math.max(rn,gn,bn), minC=Math.min(rn,gn,bn);
+    const sat=(maxC-minC);
+    // If highly saturated AND very different from mean color = stain
+    if(sat>70 && Math.abs(rn-mR)>55 && Math.abs(gn-mG)>30) stainCount++;
+  }
+  const stainRatio=stainCount/n;
+  if(stainRatio>0.015 && stainRatio<0.25 && stdDev<60) {
+    defects.push({
+      name:'Stain / Discoloration',
+      description:`Color anomaly on fabric — possible contamination (${(stainRatio*100).toFixed(1)}% area)`,
+      confidence: Math.min(0.88, 0.65+stainRatio*2)
+    });
+  }
+
+  return defects.slice(0,2);
 }
 
 // ── SHOW RESULT ───────────────────────────────────────────
 function showResult(r) {
-  const status  = r.status || 'REJECTED';
-  const isTex   = r.is_textile === true;
-  const conf    = Math.min(0.99, Math.max(0.01, parseFloat(r.confidence)||0.85));
-  const defects = r.defects || [];
-  const sev     = r.severity || 'NONE';
-  const color   = r.color || '';
-  const fabric  = r.fabric_type || '';
+  const {status,is_textile:isTex,object_name:name,
+         color_name:color,swatch,confidence:conf,defects,severity:sev} = r;
 
-  // Camera big status badge
-  const csEl = document.getElementById('cam-status');
-  const lbl  = {PASS:'✓ PASS', FAIL:'✗ FAIL', REJECTED:'⊘ NON-TEXTILE'};
-  csEl.textContent = lbl[status]||status;
-  csEl.className   = status;
-  csEl.style.display = 'block';
+  // Camera badge
+  const cs = document.getElementById('cam-status');
+  const lbl = {PASS:'✓ PASS', FAIL:'✗ FAIL', REJECTED:'⊘ NON-TEXTILE'};
+  cs.textContent = lbl[status]||status;
+  cs.className   = status;
+  cs.style.display = 'block';
 
-  // Color swatch — use sampled pixel color
-  if(r._swatch) document.getElementById('color-swatch').style.background = r._swatch;
+  // Color swatch — actual sampled pixel
+  document.getElementById('color-swatch').style.background = swatch;
 
-  // Object name — show fabric type + color
+  // Name
   const nm = document.getElementById('obj-name');
-  if(isTex) {
-    nm.textContent = fabric ? `${color} ${fabric}` : `${color} Fabric`;
-    nm.className = 'tex';
-  } else {
-    nm.textContent = r.object_name || 'Non-textile Object';
-    nm.className = 'obj';
-  }
+  nm.textContent = isTex ? `${color} Fabric` : name;
+  nm.className   = isTex ? 'tex' : 'obj';
 
   // Confidence
-  const cfEl = document.getElementById('cf');
-  cfEl.style.width = `${conf*100}%`;
-  cfEl.className   = 'cf '+(isTex?'':'nt');
-  document.getElementById('cv').textContent = `${(conf*100).toFixed(0)}%`;
+  document.getElementById('cf').style.width = `${conf*100}%`;
+  document.getElementById('cf').className   = 'cf'+(isTex?'':' nt');
+  document.getElementById('cv').textContent  = `${(conf*100).toFixed(0)}%`;
 
-  // Severity tag
-  const st = document.getElementById('stag');
-  const stMap = {NONE:'● NONE — FABRIC OK', LOW:'◆ LOW', MEDIUM:'▲ MEDIUM', HIGH:'■ HIGH SEVERITY'};
-  st.textContent = stMap[sev]||sev;
-  st.className   = 'stag '+sev;
+  // Severity
+  const se=document.getElementById('stag');
+  const sm={NONE:'● NONE — FABRIC OK',LOW:'◆ LOW',MEDIUM:'▲ MEDIUM SEVERITY',HIGH:'■ HIGH SEVERITY'};
+  se.textContent=sm[sev]||sev; se.className='stag '+sev;
 
   // Defects
-  const dl = document.getElementById('dlist');
-  if(!defects.length) {
-    const ic  = isTex?'✓':'⊘';
-    const col = isTex?'#00ff88':'#ff8c00';
-    const txt = status==='PASS'    ? 'NO DEFECTS<br>FABRIC IS CLEAN'
-              : status==='REJECTED'? 'NOT A TEXTILE<br>REJECTED'
-              : 'SCAN COMPLETE';
-    dl.innerHTML = `<div class="nd"><span class="ic" style="color:${col}">${ic}</span>${txt}</div>`;
-  } else {
-    dl.innerHTML = defects.map(d=>`
+  const dl=document.getElementById('dlist');
+  if(!defects.length){
+    const ic=isTex?'✓':'⊘', col=isTex?'#00ff88':'#ff8c00';
+    const txt=status==='PASS'?'NO DEFECTS<br>FABRIC IS CLEAN':
+              status==='REJECTED'?'NOT A TEXTILE<br>SHOW FABRIC/CLOTH':'SCAN COMPLETE';
+    dl.innerHTML=`<div class="nd"><span class="ic" style="color:${col}">${ic}</span>${txt}</div>`;
+  }else{
+    dl.innerHTML=defects.map(d=>`
       <div class="di">
         <div class="dd"></div>
         <div style="flex:1">
-          <div class="dn">${d.name||'Defect'}</div>
-          <div class="dc">${d.description||''}</div>
+          <div class="dn">${d.name}</div>
+          <div class="dc">${d.description}</div>
         </div>
-        <div class="dco">${((d.confidence||0.85)*100).toFixed(0)}%</div>
+        <div class="dco">${(d.confidence*100).toFixed(0)}%</div>
       </div>`).join('');
   }
 
@@ -413,73 +621,65 @@ function showResult(r) {
   if(status==='PASS')stats.p++;
   else if(status==='FAIL')stats.f++;
   else stats.r++;
-  document.getElementById('ss-t').textContent = stats.t;
-  document.getElementById('ss-p').textContent = stats.p;
-  document.getElementById('ss-f').textContent = stats.f;
-  document.getElementById('ss-r').textContent = stats.r;
+  document.getElementById('ss-t').textContent=stats.t;
+  document.getElementById('ss-p').textContent=stats.p;
+  document.getElementById('ss-f').textContent=stats.f;
+  document.getElementById('ss-r').textContent=stats.r;
   const tx=stats.p+stats.f;
-  document.getElementById('ss-pr').textContent = tx>0?`${(stats.p/tx*100).toFixed(1)}%`:'—';
+  document.getElementById('ss-pr').textContent=tx>0?`${(stats.p/tx*100).toFixed(1)}%`:'—';
 
-  // Status message
-  if(status==='PASS')      msg(`✓ ${nm.textContent} — PASS`);
+  if(status==='PASS')      msg(`✓ ${color} Fabric — PASS`);
   else if(status==='FAIL') msg(`⚠ Defects: ${defects.map(d=>d.name).join(', ')}`);
-  else                     msg(`⊘ ${r.object_name||'Object'} — NOT TEXTILE`);
+  else                     msg(`⊘ ${name} — NOT TEXTILE`);
 
-  // Start 10s lock
   startLock(status);
 }
 
-// ── 10 SECOND LOCK ────────────────────────────────────────
+// ── 10s LOCK ─────────────────────────────────────────────
 function startLock(status) {
-  locked  = true;
-  lockEnd = Date.now() + 10000;
-
-  const lw  = document.getElementById('lock-wrap');
-  const lf  = document.getElementById('lf');
-  const lt  = document.getElementById('lock-txt');
-  const btn = document.getElementById('scan-btn');
-
+  locked = true;
+  const end = Date.now()+10000;
+  const lw=document.getElementById('lock-wrap');
+  const lf=document.getElementById('lf');
+  const lt=document.getElementById('lock-txt');
+  const btn=document.getElementById('scan-btn');
   lw.classList.add('show');
-  lf.className = 'lf'+(status==='FAIL'?' fail':status==='REJECTED'?' rej':'');
+  lf.className='lf'+(status==='FAIL'?' fail':status==='REJECTED'?' rej':'');
 
   clearInterval(lockInterval);
-  lockInterval = setInterval(()=>{
-    const rem = Math.max(0, lockEnd - Date.now());
-    const pct = (rem/10000)*100;
-    lf.style.width = pct+'%';
-    lt.textContent = `Result locked — ${(rem/1000).toFixed(1)}s`;
-    btn.textContent= `⏳ SCAN (${(rem/1000).toFixed(0)}s)`;
-
-    if(rem <= 0) {
+  lockInterval=setInterval(()=>{
+    const rem=Math.max(0,end-Date.now());
+    lf.style.width=(rem/10000*100)+'%';
+    lt.textContent=`Result locked — ${(rem/1000).toFixed(1)}s`;
+    btn.textContent=`⏳ SCAN (${(rem/1000).toFixed(0)}s)`;
+    if(rem<=0){
       clearInterval(lockInterval);
-      locked = false;
+      locked=false;
       lw.classList.remove('show');
-      // Reset
       document.getElementById('cam-status').style.display='none';
       document.getElementById('obj-name').textContent='PRESS SCAN TO ANALYZE';
       document.getElementById('obj-name').className='';
       document.getElementById('color-swatch').style.background='#1a3050';
       document.getElementById('cf').style.width='0%';
       document.getElementById('cv').textContent='—';
-      document.getElementById('stag').textContent='● AWAITING SCAN';
+      document.getElementById('stag').textContent='● AWAITING NEXT SCAN';
       document.getElementById('stag').className='stag NONE';
       document.getElementById('dlist').innerHTML=
         '<div class="nd"><span class="ic" style="color:#00d4ff">◎</span>POINT CAMERA AT OBJECT<br>PRESS SCAN TO ANALYZE</div>';
-      resetScanBtn();
+      resetBtn();
       msg('Ready — point camera at object and press SCAN');
     }
-  }, 100);
+  },100);
 }
 
-function resetScanBtn(){
-  const btn = document.getElementById('scan-btn');
-  btn.disabled  = false;
-  btn.textContent = '⬡ SCAN NOW';
+function resetBtn(){
+  const b=document.getElementById('scan-btn');
+  b.disabled=false; b.textContent='⬡ SCAN NOW';
 }
-function msg(m){ document.getElementById('smsg').textContent = m; }
+function msg(m){document.getElementById('smsg').textContent=m;}
 
-// Auto-start camera
-window.addEventListener('load', ()=> startCam().catch(()=>{}));
+// ── INIT ─────────────────────────────────────────────────
+window.addEventListener('load', loadModel);
 </script>
 </body>
 </html>
