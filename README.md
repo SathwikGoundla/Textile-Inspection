@@ -23,6 +23,12 @@ chmod +x start.sh
 Double-click start.bat
 ```
 
+### Clone from GitHub
+```bash
+git clone https://github.com/SathwikGoundla/Textile-Inspection.git
+cd Textile-Inspection
+```
+
 ### Manual Setup
 ```bash
 cd textile_inspection/backend
@@ -141,6 +147,30 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 ```bash
 docker-compose up --build
 ```
+
+---
+
+## ☁️ Cloud Deployment
+
+### Azure App Service (Recommended)
+1. Create resource group: `az group create --name textile-rg --location eastus`
+2. Deploy: `az webapp up --resource-group textile-rg --name textile-api --runtime python:3.11`
+3. Access: `https://textile-api.azurewebsites.net`
+
+### Azure Container Apps
+```bash
+# Build & push image
+docker build -t textile-api:latest ./backend
+az acr build --registry [registry-name] --image textile-api:latest ./backend
+
+# Deploy
+az containerapp create --name textile-api --image [registry].azurecr.io/textile-api:latest
+```
+
+### GitHub Actions CI/CD
+Auto-deploy on push to `main` branch. See `.github/workflows/deploy.yml`
+
+**See [DEPLOYMENT_BACKEND.md](DEPLOYMENT_BACKEND.md) for detailed deployment steps.**
 
 ---
 
