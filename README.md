@@ -1,5 +1,5 @@
 # 🧵 TextileVision AI — Real-Time Quality Inspection System
-Testing GitReview AI pull request analysis.
+
 AI-powered textile defect detection using computer vision, YOLOv8, and FastAPI.
 
 ---
